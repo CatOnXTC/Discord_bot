@@ -1,24 +1,23 @@
 import asyncio
 import discord
 import re
+
 import time
 import datetime
+import pytz
+
 import random
 import os.path
 from discord.ext import commands
 
 from tables import response,facts
 
-FFMPEG_OPTIONS = {
-        'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-        'options': '-vn',
-    }
-
-class Funny(commands.Cog):
+class Stuff(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.channel = None
         self.voice = None
+        self.timezone = None
     
     def cog_unload(self):
         pass
@@ -30,7 +29,7 @@ class Funny(commands.Cog):
         return True
     
     async def cog_command_error(self, ctx: commands.Context, error: commands.CommandError):
-        await ctx.send(ctx.author.mention+" Jeb sie |"+ str(error))
+        await ctx.send(ctx.author.mention+" Jeb sie | "+ str(error))
 
     #---Commands definitions---
     @commands.command(name='shutdown',  aliases=['off'])
@@ -48,7 +47,6 @@ class Funny(commands.Cog):
 
         embed = discord.Embed(title="Help",description="this displays the help commands",color=0x00ff00)
         embed.add_field(name=".setchannel <channel>",value="set the channel to log stuff",inline=False)
-        embed.add_field(name=".setabcd",value="switch between true/false to adding abcd under every image",inline=False)
         embed.add_field(name=".shutdown",value="shutdowns the bot",inline=False)
         embed.add_field(name="@anyone",value="pokes a random person",inline=False)
         embed.add_field(name="@self",value="( ͡° ͜ʖ ͡°)",inline=False)
@@ -67,29 +65,15 @@ class Funny(commands.Cog):
             await ctx.send('Bruh you forget the channel lel')
             pass
 
-    @commands.command(name='sound')
+    @commands.command(name='settimezone')
     @commands.has_permissions(manage_guild=True)
-    async def _sound(self,ctx: commands.Context,soundType):
-        """Arrives to you and plays your favourite sound"""
+    async def _settimezone(self, ctx: commands.Context, zone):
+        """Set the bot working timezone"""
 
-        if len(self.bot.voice_clients) == 0 and soundType != None:
-            member = ctx.message.author
-            await ctx.send("Playing now Darude-Sandstorm")
-            for channel in member.guild.channels:
-                if channel.type == discord.ChannelType.voice:
-                    for m in channel.voice_states:
-                        if m == member.id:
-                            if os.path.isfile('audio/'+soundType):
-                                self.voice = await channel.connect()
-                                await asyncio.sleep(0.5)
-                                file = open('audio/'+soundType, 'rb')
-                                self.voice.play(discord.PCMAudio(file), after = self.voice.stop())
-                                while(self.voice.is_playing()):
-                                    await asyncio.sleep(1)
-                                file.close()
-                                await self.voice.disconnect()
-
-    #---Listener section---
+        self.timezone = pytz.timezone(zone)
+        await ctx.send('Time zone set to: ' + str(self.timezone))
+    
+    #---Listener section---#
     @commands.Cog.listener()
     async def on_voice_state_update(self ,member, before, after):
         """Voice states logger """
@@ -97,7 +81,7 @@ class Funny(commands.Cog):
         if self.channel != None and not member.bot:
             async with self.channel.typing():
                 user = member.name
-                ts = '[ '+time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())+' ]  '
+                ts = '[ '+ datetime.datetime.now(self.timezone).strftime("%Y-%m-%d %H:%M:%S")+' ]  '
                 if after.channel == None:
                     await self.channel.send(ts+'***'+user+'*** left voice channel ***'+before.channel.mention+'***')
                 elif before.channel == None:
@@ -135,10 +119,10 @@ class Funny(commands.Cog):
                     else:
                         await self.channel.send(ts+'***'+user+'*** hides himself in video call')
                 
-                #No afk channel policy
-                if after.channel != None:
-                    if after.channel.name == 'Pod mostem':
-                        await member.move_to(None,reason="OOF")
+        #No afk channel policy
+        if after.channel != None:
+            if after.channel == after.channel.guild.afk_channel:
+                await member.move_to(None,reason="OOF")
     
     @commands.Cog.listener() 
     async def on_message(self, message):
@@ -172,8 +156,9 @@ class Funny(commands.Cog):
                         emoji = discord.utils.get(message.guild.emojis, name='kannahm')
                         await message.add_reaction(emoji)
                     else:
-                        #Tak tutaj napewnie nie dzieją sie dziwne rzeczy 
-                        await message.channel.send(str(random.choice(response))+' '+message.author.mention)
+                        #Tak tutaj napewnie nie dzieją sie dziwne rzeczy
+                        if self.bot.user.id in message.raw_mentions:
+                            await message.channel.send(str(random.choice(response))+' '+message.author.mention)
 
         else:
             await self.bot.process_commands(message)
@@ -201,4 +186,4 @@ class Funny(commands.Cog):
 def setup(bot):
     """Add component"""
 
-    bot.add_cog(Funny(bot))
+    bot.add_cog(Stuff(bot))
